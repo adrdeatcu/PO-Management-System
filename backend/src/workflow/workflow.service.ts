@@ -43,6 +43,7 @@ export class WorkflowService {
 
   // ── SUBMIT ───────────────────────────────────────────────
   // Transitions: draft or needs_rework → first required stage
+  // Resolves department manager at submission time (not at draft creation)
   async submit(poId: string, user: AuthUser) {
     const po = await this.poService.findOneOrFail(poId);
 
@@ -53,11 +54,40 @@ export class WorkflowService {
       throw new BadRequestException(`Cannot submit a PO with status "${po.status}"`);
     }
 
-    // ── Compute routing flags ──
-    const isManagerRequired = po.amount >= 100; // Business rule: skip manager if < $100
+    // ── Resolve creator's department and manager ──────────
+    // Always look up fresh at submission time — manager may have changed since draft
+    const { data: profile } = await this.db.client
+      .from('profiles')
+      .select('department_id')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile?.department_id) {
+      throw new BadRequestException(
+        'You must belong to a department before submitting a PO. Contact an admin.',
+      );
+    }
+
+    const { data: department } = await this.db.client
+      .from('departments')
+      .select('id, manager_user_id')
+      .eq('id', profile.department_id)
+      .single();
+
+    const resolvedManagerId: string | null = department?.manager_user_id ?? null;
+
+    // Block submission if amount >= 100 but department has no manager
+    if (po.amount >= 100 && !resolvedManagerId) {
+      throw new BadRequestException(
+        'Your department has no manager assigned. Contact an admin before submitting.',
+      );
+    }
+
+    // ── Compute routing flags ─────────────────────────────
+    const isManagerRequired = po.amount >= 100 && !!resolvedManagerId;
     const isItRequired = po.category === 'IT Equipment';
 
-    // ── Determine first stage ──
+    // ── Determine first stage ─────────────────────────────
     let nextStatus: string;
     let nextStage: string;
 
@@ -72,17 +102,10 @@ export class WorkflowService {
       nextStage = 'finance';
     }
 
-    // Validate: if manager is required but no manager is assigned, block submission
-    if (isManagerRequired && !po.manager_user_id) {
-      throw new BadRequestException(
-        'Your department has no manager assigned. Please contact an admin before submitting.',
-      );
-    }
-
     const isResubmission = po.status === 'needs_rework';
     const now = new Date().toISOString();
 
-    // ── Update PO ──
+    // ── Update PO ─────────────────────────────────────────
     await this.db.client
       .from('purchase_orders')
       .update({
@@ -90,14 +113,18 @@ export class WorkflowService {
         current_stage: nextStage,
         is_manager_approval_required: isManagerRequired,
         is_it_validation_required: isItRequired,
-        submitted_at: po.submitted_at ?? now, // Preserve original submission time
-        resubmission_count: isResubmission ? po.resubmission_count + 1 : po.resubmission_count,
-        last_rejected_at: null,         // Clear rejection info on resubmit
+        manager_user_id: resolvedManagerId,      // Snapshot manager at submission time
+        department_id: profile.department_id,    // Ensure always current
+        submitted_at: po.submitted_at ?? now,    // Preserve original submission time on resubmit
+        resubmission_count: isResubmission
+          ? po.resubmission_count + 1
+          : po.resubmission_count,
+        last_rejected_at: null,                  // Clear rejection info on resubmit
         last_rejection_reason: null,
       })
       .eq('id', poId);
 
-    // ── Write audit action ──
+    // ── Write audit action ────────────────────────────────
     await this.writeAuditAction({
       poId,
       actionType: isResubmission ? 'resubmitted' : 'submitted',
@@ -120,7 +147,7 @@ export class WorkflowService {
     this.assertStage(po, 'pending_manager', 'manager');
     this.assertIsAssignedManager(po, user);
 
-    // After manager approval: IT (if required) → Finance
+    // After manager: IT (if required) → Finance
     const nextStatus = po.is_it_validation_required ? 'pending_it' : 'pending_finance';
     const nextStage = po.is_it_validation_required ? 'it' : 'finance';
 
@@ -217,7 +244,6 @@ export class WorkflowService {
   async reject(poId: string, dto: RejectPoDto, user: AuthUser) {
     const po = await this.poService.findOneOrFail(poId);
 
-    // Check the user is a valid rejector for the current stage
     this.assertCanRejectAtStage(po, user);
 
     const now = new Date().toISOString();
@@ -254,7 +280,6 @@ export class WorkflowService {
     if (po.status !== 'approved') {
       throw new BadRequestException('Only fully approved POs can be marked as completed');
     }
-    // Completion can be done by finance or admin
     if (!user.roles.includes('finance') && !user.roles.includes('admin')) {
       throw new ForbiddenException('Only finance or admin can mark a PO as completed');
     }
@@ -286,32 +311,53 @@ export class WorkflowService {
     return { message: 'PO marked as completed.' };
   }
 
-  // ── Approval Inbox (for approvers) ────────────────────────
-  // Returns POs that are waiting for action from this specific user.
+  // ── APPROVAL INBOX ────────────────────────────────────────
+  // Returns POs waiting for action from this specific user.
+  // Uses separate queries per role to avoid complex OR string parsing issues.
   async getInbox(user: AuthUser) {
-    const conditions: string[] = [];
+    const results: any[] = [];
 
+    // Manager: only POs explicitly assigned to this user
     if (user.roles.includes('manager')) {
-      // Manager sees POs assigned to them personally
-      conditions.push(`and(current_stage.eq.manager,manager_user_id.eq.${user.id})`);
+      const { data } = await this.db.client
+        .from('purchase_orders')
+        .select('id, po_number, title, amount, category, status, current_stage, submitted_at, department_id')
+        .eq('status', 'pending_manager')
+        .eq('manager_user_id', user.id)
+        .order('submitted_at', { ascending: true });
+
+      if (data) results.push(...data);
     }
+
+    // IT: all POs at IT stage (any IT user can act)
     if (user.roles.includes('it')) {
-      conditions.push(`current_stage.eq.it`);
+      const { data } = await this.db.client
+        .from('purchase_orders')
+        .select('id, po_number, title, amount, category, status, current_stage, submitted_at, department_id')
+        .eq('status', 'pending_it')
+        .order('submitted_at', { ascending: true });
+
+      if (data) results.push(...data);
     }
+
+    // Finance: all POs at finance stage (any finance user can act)
     if (user.roles.includes('finance')) {
-      conditions.push(`current_stage.eq.finance`);
+      const { data } = await this.db.client
+        .from('purchase_orders')
+        .select('id, po_number, title, amount, category, status, current_stage, submitted_at, department_id')
+        .eq('status', 'pending_finance')
+        .order('submitted_at', { ascending: true });
+
+      if (data) results.push(...data);
     }
 
-    if (conditions.length === 0) return [];
-
-    const { data, error } = await this.db.client
-      .from('purchase_orders')
-      .select('id, po_number, title, amount, category, status, current_stage, submitted_at, department_id, departments(name)')
-      .or(conditions.join(','))
-      .order('submitted_at', { ascending: true }); // Oldest first — FIFO queue
-
-    if (error) throw new BadRequestException(error.message);
-    return data;
+    // Deduplicate by id (handles users with multiple roles, e.g. manager + finance)
+    const seen = new Set<string>();
+    return results.filter((po) => {
+      if (seen.has(po.id)) return false;
+      seen.add(po.id);
+      return true;
+    });
   }
 
   // ── Private helpers ───────────────────────────────────────
