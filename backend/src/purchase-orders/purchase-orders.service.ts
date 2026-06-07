@@ -144,6 +144,88 @@ export class PurchaseOrdersService {
     return data;
   }
 
+  // ── Dashboard stats for the current user ───────────────
+  async getDashboardStats(user: AuthUser) {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+    // Run all queries in parallel
+    const [
+      { count: draftCount },
+      { count: needsReworkCount },
+      { count: pendingApprovalCount },
+      { count: completedThisMonthCount },
+      { count: totalMyPOs },
+    ] = await Promise.all([
+      this.db.client
+        .from('purchase_orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('created_by', user.id)
+        .eq('status', 'draft'),
+
+      this.db.client
+        .from('purchase_orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('created_by', user.id)
+        .eq('status', 'needs_rework'),
+
+      this.db.client
+        .from('purchase_orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('created_by', user.id)
+        .in('status', ['pending_manager', 'pending_it', 'pending_finance']),
+
+      this.db.client
+        .from('purchase_orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('created_by', user.id)
+        .eq('status', 'completed')
+        .gte('completed_at', startOfMonth),
+
+      this.db.client
+        .from('purchase_orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('created_by', user.id),
+    ]);
+
+    // Inbox count — POs waiting for THIS user's action as approver
+    let inboxCount = 0;
+
+    if (user.roles.includes('manager')) {
+      const { count } = await this.db.client
+        .from('purchase_orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending_manager')
+        .eq('manager_user_id', user.id);
+      inboxCount += count ?? 0;
+    }
+
+    if (user.roles.includes('it')) {
+      const { count } = await this.db.client
+        .from('purchase_orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending_it');
+      inboxCount += count ?? 0;
+    }
+
+    if (user.roles.includes('finance')) {
+      const { count } = await this.db.client
+        .from('purchase_orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending_finance');
+      inboxCount += count ?? 0;
+    }
+
+    return {
+      my_draft: draftCount ?? 0,
+      my_needs_rework: needsReworkCount ?? 0,
+      my_pending_approval: pendingApprovalCount ?? 0,
+      my_completed_this_month: completedThisMonthCount ?? 0,
+      my_total: totalMyPOs ?? 0,
+      inbox_pending: inboxCount,
+    };
+  }
+
   // ── Internal helper ─────────────────────────────────────
   async findOneOrFail(id: string) {
     const { data, error } = await this.db.client

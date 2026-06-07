@@ -14,6 +14,12 @@ import type { AuthUser } from '../common/types/user-context.type';
 export class PurchaseOrdersController {
   constructor(private readonly poService: PurchaseOrdersService) {}
 
+  // ── MUST be before /:id — otherwise "stats" is parsed as a UUID ──
+  @Get('stats')
+  getDashboardStats(@CurrentUser() user: AuthUser) {
+    return this.poService.getDashboardStats(user);
+  }
+
   @Get()
   findMyPOs(@CurrentUser() user: AuthUser, @Query() query: QueryPoDto) {
     return this.poService.findMyPOs(user, query);

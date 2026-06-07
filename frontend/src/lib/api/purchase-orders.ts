@@ -15,7 +15,21 @@ export interface QueryPOParams {
   limit?: number;
 }
 
+export interface DashboardStats {
+  my_draft: number;
+  my_needs_rework: number;
+  my_pending_approval: number;
+  my_completed_this_month: number;
+  my_total: number;
+  inbox_pending: number;
+}
+
 export const purchaseOrdersApi = {
+  getStats: async (): Promise<DashboardStats> => {
+    const { data } = await apiClient.get('/purchase-orders/stats');
+    return data as DashboardStats;
+  },
+
   getMyPOs: async (params?: QueryPOParams): Promise<PurchaseOrder[]> => {
     const { data } = await apiClient.get('/purchase-orders', { params });
     return data as PurchaseOrder[];
