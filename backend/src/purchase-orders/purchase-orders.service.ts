@@ -20,14 +20,12 @@ export class PurchaseOrdersService {
       throw new BadRequestException('You must belong to a department before creating a PO');
     }
 
-    // Fetch the department to snapshot the manager
     const { data: dept } = await this.db.client
       .from('departments')
       .select('manager_user_id')
       .eq('id', user.departmentId)
       .single();
 
-    // Generate the PO number via the SQL function
     const { data: poNumResult } = await this.db.client
       .rpc('generate_po_number');
 
@@ -83,26 +81,47 @@ export class PurchaseOrdersService {
   async findOne(id: string, user: AuthUser) {
     const po = await this.findOneOrFail(id);
 
-    // Ownership / access check:
-    // Creator can always view their own. Approvers can view if it's their stage.
-    // Admin sees everything (enforced in admin controller separately).
-    const isCreator = po.created_by === user.id;
-    const isManager = po.manager_user_id === user.id;
-    const isIT = user.roles.includes('it');
-    const isFinance = user.roles.includes('finance');
+    // Access check: creator, assigned manager, IT, Finance, or Admin
+    const canView =
+      po.created_by === user.id ||
+      po.manager_user_id === user.id ||
+      user.roles.includes('it') ||
+      user.roles.includes('finance') ||
+      user.roles.includes('admin');
 
-    if (!isCreator && !isManager && !isIT && !isFinance) {
+    if (!canView) {
       throw new ForbiddenException('You do not have access to this purchase order');
     }
 
-    // Fetch audit trail
+    // Fetch audit trail — no FK join to avoid PostgREST ambiguity
     const { data: actions } = await this.db.client
       .from('po_approval_actions')
-      .select('*, profiles!po_approval_actions_acted_by_fkey(full_name, email)')
+      .select('id, action_type, stage, from_status, to_status, from_stage, to_stage, acted_by, comment, created_at')
       .eq('purchase_order_id', id)
       .order('created_at', { ascending: true });
 
-    return { ...po, actions: actions ?? [] };
+    // Fetch actor names separately
+    const actorIds = [
+      ...new Set((actions ?? []).map((a) => a.acted_by).filter(Boolean)),
+    ];
+
+    let actorMap: Record<string, { full_name: string; email: string }> = {};
+
+    if (actorIds.length > 0) {
+      const { data: actors } = await this.db.client
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', actorIds);
+
+      actorMap = Object.fromEntries((actors ?? []).map((p) => [p.id, p]));
+    }
+
+    const enrichedActions = (actions ?? []).map((action) => ({
+      ...action,
+      actor: actorMap[action.acted_by] ?? null,
+    }));
+
+    return { ...po, actions: enrichedActions };
   }
 
   // ── My POs (creator view) ───────────────────────────────

@@ -61,11 +61,13 @@ export interface POAction {
   stage: POStage;
   from_status: POStatus | null;
   to_status: POStatus | null;
+  from_stage: POStage | null;
+  to_stage: POStage | null;
   acted_by: string;
   comment: string | null;
   created_at: string;
-  profiles?: {
+  actor?: {
     full_name: string;
     email: string;
-  };
+  } | null;
 }

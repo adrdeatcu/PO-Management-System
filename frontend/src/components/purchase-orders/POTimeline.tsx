@@ -4,29 +4,29 @@ import { formatDate } from '../../lib/utils/format';
 import type { POAction } from '../../types/purchase-order';
 
 const actionLabels: Record<string, string> = {
-  created:           'PO Created',
-  submitted:         'Submitted for Approval',
-  resubmitted:       'Resubmitted after Rework',
-  approved_manager:  'Approved by Manager',
-  approved_it:       'Validated by IT',
-  approved_finance:  'Approved by Finance',
-  rejected:          'Rejected',
+  created:             'PO Created',
+  submitted:           'Submitted for Approval',
+  resubmitted:         'Resubmitted after Rework',
+  approved_manager:    'Approved by Manager',
+  approved_it:         'Validated by IT',
+  approved_finance:    'Approved by Finance',
+  rejected:            'Rejected',
   returned_for_rework: 'Returned for Rework',
-  completed:         'Marked as Completed',
-  edited:            'PO Edited',
+  completed:           'Marked as Completed',
+  edited:              'PO Edited',
 };
 
 const actionColors: Record<string, string> = {
-  approved_manager:  'bg-green-500',
-  approved_it:       'bg-green-500',
-  approved_finance:  'bg-green-500',
-  completed:         'bg-green-600',
-  rejected:          'bg-red-500',
+  approved_manager:    'bg-green-500',
+  approved_it:         'bg-green-500',
+  approved_finance:    'bg-green-500',
+  completed:           'bg-green-600',
+  rejected:            'bg-red-500',
   returned_for_rework: 'bg-red-400',
-  submitted:         'bg-blue-500',
-  resubmitted:       'bg-blue-400',
-  created:           'bg-gray-400',
-  edited:            'bg-gray-400',
+  submitted:           'bg-blue-500',
+  resubmitted:         'bg-blue-400',
+  created:             'bg-gray-400',
+  edited:              'bg-gray-400',
 };
 
 interface POTimelineProps {
@@ -68,9 +68,9 @@ export function POTimeline({ actions }: POTimelineProps) {
                         &ldquo;{action.comment}&rdquo;
                       </p>
                     )}
-                    {action.profiles && (
+                    {action.actor && (
                       <p className="mt-0.5 text-xs text-gray-400">
-                        by {action.profiles.full_name}
+                        by {action.actor.full_name}
                       </p>
                     )}
                   </div>

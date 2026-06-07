@@ -1,7 +1,6 @@
 import {
   Injectable,
   BadRequestException,
-  NotFoundException,
 } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -31,7 +30,6 @@ export class AdminUsersService {
     const { data: profiles, error } = await query;
     if (error) throw new BadRequestException(error.message);
 
-    // Fetch roles for each user
     const userIds = (profiles ?? []).map((p) => p.id);
     if (userIds.length === 0) return [];
 
@@ -40,7 +38,6 @@ export class AdminUsersService {
       .select('user_id, roles(id, code, name)')
       .in('user_id', userIds);
 
-    // Merge roles into each profile
     return (profiles ?? []).map((profile) => ({
       ...profile,
       roles: (allUserRoles ?? [])
@@ -51,23 +48,18 @@ export class AdminUsersService {
   }
 
   // ── Create user via Supabase Admin Auth API ───────────────
-  // This is the safe way — we never expose password hashing.
-  // Supabase handles it; we just patch the profile after creation.
   async createUser(dto: CreateUserDto) {
-    // 1. Create auth user via Supabase Admin API
     const { data: authData, error: authError } =
       await this.db.adminClient.auth.admin.createUser({
         email: dto.email,
         password: dto.password,
-        email_confirm: true, // Skip email confirmation for internal tool
+        email_confirm: true,
         user_metadata: { full_name: dto.full_name },
       });
 
     if (authError) throw new BadRequestException(authError.message);
     const newUserId = authData.user.id;
 
-    // 2. The handle_new_user trigger auto-creates the profile row.
-    //    We now patch it with the correct full_name and department.
     const { error: profileError } = await this.db.client
       .from('profiles')
       .update({
@@ -78,7 +70,6 @@ export class AdminUsersService {
 
     if (profileError) throw new BadRequestException(profileError.message);
 
-    // 3. Assign default 'employee' role + any additional roles
     const roleCodes = ['employee', ...(dto.role_codes ?? [])];
     const uniqueRoleCodes = [...new Set(roleCodes)];
 
@@ -135,6 +126,7 @@ export class AdminUsersService {
   }
 
   // ── Get all POs (admin overview) ──────────────────────────
+  // Uses separate queries to avoid PostgREST FK ambiguity on profiles join
   async getAllPOs(status?: string, search?: string) {
     let query = this.db.client
       .from('purchase_orders')
@@ -143,16 +135,39 @@ export class AdminUsersService {
         status, current_stage, created_at, submitted_at, completed_at,
         is_manager_approval_required, is_it_validation_required,
         resubmission_count, invoice_reference,
-        profiles!purchase_orders_created_by_fkey(full_name, email),
-        departments(name, code)
+        created_by, department_id
       `)
       .order('created_at', { ascending: false });
 
     if (status) query = query.eq('status', status);
     if (search) query = query.ilike('title', `%${search}%`);
 
-    const { data, error } = await query;
+    const { data: pos, error } = await query;
     if (error) throw new BadRequestException(error.message);
-    return data;
+    if (!pos || pos.length === 0) return [];
+
+    // Collect unique IDs for batch lookups
+    const creatorIds = [...new Set(pos.map((po) => po.created_by).filter(Boolean))];
+    const deptIds = [...new Set(pos.map((po) => po.department_id).filter(Boolean))];
+
+    const [{ data: profiles }, { data: departments }] = await Promise.all([
+      this.db.client
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', creatorIds),
+      this.db.client
+        .from('departments')
+        .select('id, name, code')
+        .in('id', deptIds),
+    ]);
+
+    const profileMap = Object.fromEntries((profiles ?? []).map((p) => [p.id, p]));
+    const deptMap = Object.fromEntries((departments ?? []).map((d) => [d.id, d]));
+
+    return pos.map((po) => ({
+      ...po,
+      profiles: profileMap[po.created_by] ?? null,
+      departments: deptMap[po.department_id] ?? null,
+    }));
   }
 }
