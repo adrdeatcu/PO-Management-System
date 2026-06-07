@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '../ui/Button';
 import { purchaseOrdersApi } from '../../lib/api/purchase-orders';
 import type { PurchaseOrder, POCategory } from '../../types/purchase-order';
+import { ApprovalPathPreview } from './ApprovalPathPreview';
 
 const CATEGORIES: POCategory[] = [
   'IT Equipment',
@@ -37,7 +38,7 @@ export function POForm({ mode, initialData }: POFormProps) {
     setError(null);
 
     const parsedAmount = parseFloat(amount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+    if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
       setError('Amount must be a positive number.');
       return;
     }
@@ -154,6 +155,9 @@ export function POForm({ mode, initialData }: POFormProps) {
           )}
         </div>
       </div>
+
+      {/* Live approval path preview */}
+      <ApprovalPathPreview amount={amount} category={category} />
 
       {/* Error */}
       {error && (
