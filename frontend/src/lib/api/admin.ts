@@ -46,6 +46,16 @@ export const adminApi = {
     return data;
   },
 
+  createDepartment: async (payload: { name: string; code: string }) => {
+    const { data } = await apiClient.post('/admin/departments', payload);
+    return data;
+  },
+
+  updateDepartment: async (id: string, payload: { name?: string; manager_user_id?: string | null }) => {
+    const { data } = await apiClient.patch(`/admin/departments/${id}`, payload);
+    return data;
+  },
+
   getRoles: async () => {
     const { data } = await apiClient.get('/roles');
     return data;

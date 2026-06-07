@@ -28,7 +28,14 @@ export class DatabaseService implements OnModuleInit {
     this.logger.log('Supabase service-role client initialized');
   }
 
+  // Used for all regular database queries (bypasses RLS via service role)
   get client(): SupabaseClient {
+    return this.supabase;
+  }
+
+  // Aliased getter for Auth Admin API calls (auth.admin.createUser, etc.)
+  // It's the same service-role client — the alias makes intent explicit
+  get adminClient(): SupabaseClient {
     return this.supabase;
   }
 
