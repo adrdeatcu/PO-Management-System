@@ -1,63 +1,90 @@
 import apiClient from './client';
 
+export interface AdminRole {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export interface AdminUser {
+  id: string;
+  full_name: string;
+  email: string;
+  department_id: string | null;
+  created_at: string;
+  departments: { id: string; name: string; code: string } | null;
+  roles: AdminRole[];
+}
+
+export interface AdminDepartment {
+  id: string;
+  name: string;
+  code: string;
+  manager_user_id: string | null;
+}
+
 export const adminApi = {
+  // Users
   getUsers: async (search?: string) => {
     const { data } = await apiClient.get('/admin/users', {
       params: search ? { search } : undefined,
     });
-    return data;
+    return data as AdminUser[];
   },
 
   createUser: async (payload: {
+    full_name: string;
     email: string;
     password: string;
-    full_name: string;
-    department_id?: string;
+    department_id?: string | null;
     role_codes?: string[];
   }) => {
     const { data } = await apiClient.post('/admin/users', payload);
-    return data;
+    return data as { id: string; message: string };
   },
 
-  updateUserDepartment: async (userId: string, departmentId: string | null) => {
-    const { data } = await apiClient.patch(`/admin/users/${userId}/department`, {
-      department_id: departmentId,
-    });
-    return data;
+  updateUserDepartment: async (userId: string, department_id: string | null) => {
+    const { data } = await apiClient.patch(`/admin/users/${userId}/department`, { department_id });
+    return data as { message: string };
+  },
+
+  // Roles
+  getRoles: async () => {
+    const { data } = await apiClient.get('/admin/roles');
+    return data as AdminRole[];
   },
 
   assignRole: async (userId: string, roleId: string) => {
-    const { data } = await apiClient.post(`/admin/users/${userId}/roles`, { role_id: roleId });
-    return data;
+    const { data } = await apiClient.post(`/admin/users/${userId}/roles`, {
+      role_id: roleId,
+    });
+    return data as { message: string };
   },
 
   removeRole: async (userId: string, roleId: string) => {
     const { data } = await apiClient.delete(`/admin/users/${userId}/roles/${roleId}`);
-    return data;
+    return data as { message: string };
   },
 
-  getAllPOs: async (params?: { status?: string; search?: string }) => {
-    const { data } = await apiClient.get('/admin/purchase-orders', { params });
-    return data;
-  },
-
+  // Departments
   getDepartments: async () => {
-    const { data } = await apiClient.get('/departments');
-    return data;
+    const { data } = await apiClient.get('/admin/departments');
+    return data as AdminDepartment[];
   },
 
-  createDepartment: async (payload: { name: string; code: string }) => {
-    const { data } = await apiClient.post('/admin/departments', payload);
-    return data;
+  setDepartmentManager: async (userId: string, departmentId: string) => {
+    const { data } = await apiClient.post('/admin/departments/set-manager', {
+      user_id: userId,
+      department_id: departmentId,
+    });
+    return data as { message: string; previous_manager_id: string | null };
   },
 
-  updateDepartment: async (id: string, payload: { name?: string; manager_user_id?: string | null }) => {
-    const { data } = await apiClient.patch(`/admin/departments/${id}`, payload);
-    return data;
-  },
-
-  getRoles: async () => {
-    const { data } = await apiClient.get('/roles');
+  // Purchase orders (admin overview)
+  getAllPOs: async (params?: { status?: string; search?: string }) => {
+    const { data } = await apiClient.get('/admin/purchase-orders', {
+      params,
+    });
     return data;
   },
 };

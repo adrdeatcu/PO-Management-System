@@ -170,4 +170,71 @@ export class AdminUsersService {
       departments: deptMap[po.department_id] ?? null,
     }));
   }
+
+  // ── Set department manager and ensure manager role ────────
+  async setDepartmentManager(userId: string, departmentId: string) {
+    // 1) Get manager role id
+    const { data: managerRole, error: roleError } = await this.db.client
+      .from('roles')
+      .select('id')
+      .eq('code', 'manager')
+      .single();
+
+    if (roleError || !managerRole) {
+      throw new BadRequestException('Manager role not found.');
+    }
+
+    // 2) Fetch department
+    const { data: dept, error: deptError } = await this.db.client
+      .from('departments')
+      .select('id, manager_user_id')
+      .eq('id', departmentId)
+      .single();
+
+    if (deptError || !dept) {
+      throw new BadRequestException('Department not found.');
+    }
+
+    const previousManagerId = dept.manager_user_id ?? null;
+
+    // 3) Ensure user belongs to this department
+    const { data: profile, error: profileError } = await this.db.client
+      .from('profiles')
+      .select('id, department_id')
+      .eq('id', userId)
+      .single();
+
+    if (profileError || !profile) {
+      throw new BadRequestException('User profile not found.');
+    }
+
+    if (profile.department_id !== departmentId) {
+      throw new BadRequestException(
+        'User must belong to the department in order to become its manager.',
+      );
+    }
+
+    // 4) Set this user as department manager
+    const { error: updateError } = await this.db.client
+      .from('departments')
+      .update({ manager_user_id: userId })
+      .eq('id', departmentId);
+
+    if (updateError) throw new BadRequestException(updateError.message);
+
+    // 5) Ensure user has manager role
+    const { error: roleAssignError } = await this.db.client
+      .from('user_roles')
+      .upsert(
+        { user_id: userId, role_id: managerRole.id },
+        { onConflict: 'user_id,role_id' },
+      );
+
+    if (roleAssignError) throw new BadRequestException(roleAssignError.message);
+
+    return {
+      message: 'Department manager updated.',
+      previous_manager_id: previousManagerId,
+    };
+  }
 }
