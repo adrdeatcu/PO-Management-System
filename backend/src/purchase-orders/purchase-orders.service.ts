@@ -234,7 +234,6 @@ export class PurchaseOrdersService {
   async summarizeFeedback(poId: string, user: AuthUser) {
     const po = await this.findOneOrFail(poId);
 
-    // Same access check as findOne
     const canView =
       po.created_by === user.id ||
       po.manager_user_id === user.id ||
@@ -266,7 +265,6 @@ export class PurchaseOrdersService {
       );
     }
 
-    // Limit to last 5 comments to keep payload reasonable
     const lastComments = comments.slice(-5);
 
     return this.gemini.summarizeRejections(lastComments);

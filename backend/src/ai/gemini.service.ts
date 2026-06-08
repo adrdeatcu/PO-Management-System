@@ -14,9 +14,22 @@ export class GeminiService {
 
     const prompt = [
       'You are helping a user understand why their purchase order was rejected multiple times.',
-      'Read the following reviewer comments (from managers, IT, and finance) and then:',
-      '1) Write a short plain-language summary (3–5 bullet points) of the main issues.',
+      'You will be given reviewer comments (from managers, IT, and finance).',
+      '',
+      'Your task:',
+      '1) Write a concise, plain-language summary of the main reasons for rejection.',
       '2) Write 3–5 concrete, actionable tips to improve the purchase order so it can be approved next time.',
+      '',
+      'IMPORTANT OUTPUT FORMAT:',
+      'Return your answer as plain text with exactly two labeled sections in this order:',
+      '',
+      'Summary:',
+      '<one or more short lines summarizing the main issues>',
+      '',
+      'Tips:',
+      '<3–5 short bullet points with concrete advice>',
+      '',
+      'Do not add any other headings.',
       '',
       'Reviewer comments:',
       ...comments.map((c, i) => `${i + 1}. ${c}`),
@@ -39,7 +52,6 @@ export class GeminiService {
 
       if (!res.ok) {
         const errorBody = await res.text();
-        // Temporary logging for debugging
         // eslint-disable-next-line no-console
         console.error('Gemini API error:', res.status, errorBody);
         throw new Error(`Gemini API error: ${res.status}`);
@@ -47,7 +59,7 @@ export class GeminiService {
 
       const data = await res.json();
 
-      // Optional: log once to inspect shape
+      // Optional logging for debugging shape
       // eslint-disable-next-line no-console
       console.log('Gemini API response:', JSON.stringify(data, null, 2));
 
@@ -55,9 +67,27 @@ export class GeminiService {
         data?.candidates?.[0]?.content?.parts?.[0]?.text ??
         'No summary available.';
 
+      let summary = text;
+      let tips = '';
+
+      const summaryIndex = text.indexOf('Summary:');
+      const tipsIndex = text.indexOf('Tips:');
+
+      if (summaryIndex !== -1 && tipsIndex !== -1 && tipsIndex > summaryIndex) {
+        const summaryPart = text
+          .slice(summaryIndex + 'Summary:'.length, tipsIndex)
+          .trim();
+        const tipsPart = text
+          .slice(tipsIndex + 'Tips:'.length)
+          .trim();
+
+        if (summaryPart) summary = summaryPart;
+        if (tipsPart) tips = tipsPart;
+      }
+
       return {
-        summary: text,
-        tips: '',
+        summary,
+        tips,
       };
     } catch (err) {
       // eslint-disable-next-line no-console
