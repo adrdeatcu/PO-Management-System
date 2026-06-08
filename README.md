@@ -8,7 +8,7 @@
 
 <hr />
 
-<h2>Employee Experience Screenshots</h2>
+<h2>Employee Experience</h2>
 
 <h3>1. Employee Dashboard (Overview)</h3>
 <p>
@@ -118,5 +118,72 @@
 <p>
   <img src="screenshots/ai_assistant_for_atleast_2_rejections.jpg"
        alt="AI assistant summary for a purchase order with multiple rejections"
+       width="100%" />
+</p>
+
+<hr />
+
+<h2>Admin Experience</h2>
+
+<h3>9. Admin Dashboard</h3>
+<p>
+  Admin users see a dashboard similar to employees, but with additional quick access to
+  admin sections such as Users, Departments, Role Assignments, and All POs. This gives
+  admins a central place to monitor the system and access control panels.
+</p>
+<p>
+  <img src="screenshots/admin_dashboard_page-3.jpg"
+       alt="Admin dashboard with links to admin sections"
+       width="100%" />
+</p>
+
+<h3>10. Admin &gt; User Management</h3>
+<p>
+  The <strong>User Management</strong> page allows admins to view and manage user accounts.
+  Admins can see each user’s name, email, department, roles, and joined date. From here
+  they can also manage roles for each user, which drives access to employee, manager,
+  IT, finance, and admin features.
+</p>
+<p>
+  <img src="screenshots/admin_user_management_page.jpg"
+       alt="Admin user management page with list of users and roles"
+       width="100%" />
+</p>
+
+<h3>11. Admin &gt; Department Management</h3>
+<p>
+  The <strong>Department Management</strong> page lets admins define departments and assign
+  a manager to each one. Manager assignments are used by the workflow engine to route
+  manager approvals based on the requester’s department.
+</p>
+<p>
+  <img src="screenshots/admin_department_management_page-4.jpg"
+       alt="Admin department management page showing departments and managers"
+       width="100%" />
+</p>
+
+<h3>12. Admin &gt; Role Assignments</h3>
+<p>
+  The <strong>Role Assignments</strong> page provides a centralized view of which roles
+  each user has (employee, manager, it, finance, admin). Admins can quickly see and
+  adjust role combinations, ensuring that approval responsibilities and permissions
+  reflect the organization’s structure.
+</p>
+<p>
+  <img src="screenshots/admin_role_assignments_page-5.jpg"
+       alt="Admin role assignments page with users and their roles"
+       width="100%" />
+</p>
+
+<h3>13. Admin &gt; All Purchase Orders</h3>
+<p>
+  The <strong>All Purchase Orders</strong> page is an oversight view for admins. It lists
+  all POs across the organization with filters for status and search by title or PO number.
+  Columns include PO number, title, requester, amount, status, current stage, and created date.
+  This page gives admins a read-only audit-style view of the entire PO pipeline.
+</p>
+<p>
+  <img src="screenshots/admin_all_purchase_orders_page-2.jpg"
+       alt="Admin all purchase orders page with filters"
        width="100%" />
 </p>
