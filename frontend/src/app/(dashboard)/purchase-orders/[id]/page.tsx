@@ -24,6 +24,11 @@ export default function PODetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [summary, setSummary] = useState<string | null>(null);
+  const [summaryTips, setSummaryTips] = useState<string | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+
   const fetchPO = useCallback(async () => {
     try {
       const data = await purchaseOrdersApi.getOne(id);
@@ -51,6 +56,37 @@ export default function PODetailPage() {
   }
 
   const canEdit = currentUser ? canEditPO(po, currentUser) : false;
+
+  // Count rejection / rework comments to decide if we show the AI button
+  const rejectionCommentsCount =
+    (po.actions ?? []).filter(
+      (a) =>
+        (a.action_type === 'rejected' || a.action_type === 'returned_for_rework') &&
+        a.comment &&
+        a.comment.trim().length > 0,
+    ).length;
+
+  const canSummarize = rejectionCommentsCount >= 2;
+
+  const handleSummarize = async () => {
+    setSummaryError(null);
+    setSummary(null);
+    setSummaryTips(null);
+    setSummaryLoading(true);
+
+    try {
+      const result = await purchaseOrdersApi.summarizeFeedback(po.id);
+      setSummary(result.summary);
+      setSummaryTips(result.tips || null);
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message ??
+        'Could not summarize feedback. Please try again later.';
+      setSummaryError(msg);
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
 
   return (
     <>
@@ -200,6 +236,48 @@ export default function PODetailPage() {
               <h3 className="text-sm font-semibold text-gray-900 mb-4">Activity Timeline</h3>
               <POTimeline actions={po.actions ?? []} />
             </div>
+
+            {/* AI Feedback Summary (optional) */}
+            {canSummarize && (
+              <div className="bg-white rounded-lg border border-teal-200 p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-gray-900">
+                    AI feedback summary
+                  </h3>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={handleSummarize}
+                    loading={summaryLoading}
+                  >
+                    Summarize feedback
+                  </Button>
+                </div>
+
+                {summaryError && (
+                  <p className="text-xs text-red-600 mb-2">{summaryError}</p>
+                )}
+
+                {summary && (
+                  <div className="space-y-2 text-sm text-gray-700">
+                    <p className="font-medium">Main issues:</p>
+                    <p className="text-gray-700 whitespace-pre-line">{summary}</p>
+                    {summaryTips && (
+                      <>
+                        <p className="font-medium mt-2">Tips to improve:</p>
+                        <p className="text-gray-700 whitespace-pre-line">{summaryTips}</p>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {!summary && !summaryError && !summaryLoading && (
+                  <p className="text-xs text-gray-500">
+                    This will use recent rejection comments to summarize why this PO was rejected and suggest how to improve it.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Right: Actions */}

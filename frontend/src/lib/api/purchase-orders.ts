@@ -24,6 +24,12 @@ export interface DashboardStats {
   inbox_pending: number;
 }
 
+// Shape of the AI summary returned by the backend
+export interface FeedbackSummary {
+  summary: string;
+  tips: string;
+}
+
 export const purchaseOrdersApi = {
   getStats: async (): Promise<DashboardStats> => {
     const { data } = await apiClient.get('/purchase-orders/stats');
@@ -48,5 +54,10 @@ export const purchaseOrdersApi = {
   update: async (id: string, payload: Partial<CreatePOPayload>): Promise<PurchaseOrder> => {
     const { data } = await apiClient.patch(`/purchase-orders/${id}`, payload);
     return data as PurchaseOrder;
+  },
+
+  summarizeFeedback: async (id: string): Promise<FeedbackSummary> => {
+    const { data } = await apiClient.post(`/purchase-orders/${id}/summarize-feedback`);
+    return data as FeedbackSummary;
   },
 };

@@ -9,10 +9,14 @@ import { AuthUser } from '../common/types/user-context.type';
 import { CreatePoDto } from './dto/create-po.dto';
 import { UpdatePoDto } from './dto/update-po.dto';
 import { QueryPoDto } from './dto/query-po.dto';
+import { GeminiService } from '../ai/gemini.service';
 
 @Injectable()
 export class PurchaseOrdersService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly gemini: GeminiService,
+  ) {}
 
   // ── Create a new PO in draft state ─────────────────────
   async create(dto: CreatePoDto, user: AuthUser) {
@@ -224,6 +228,48 @@ export class PurchaseOrdersService {
       my_total: totalMyPOs ?? 0,
       inbox_pending: inboxCount,
     };
+  }
+
+  // ── AI: summarize rejection feedback for a PO ─────────────
+  async summarizeFeedback(poId: string, user: AuthUser) {
+    const po = await this.findOneOrFail(poId);
+
+    // Same access check as findOne
+    const canView =
+      po.created_by === user.id ||
+      po.manager_user_id === user.id ||
+      user.roles.includes('it') ||
+      user.roles.includes('finance') ||
+      user.roles.includes('admin');
+
+    if (!canView) {
+      throw new ForbiddenException('You do not have access to this purchase order');
+    }
+
+    const { data: actions, error } = await this.db.client
+      .from('po_approval_actions')
+      .select('action_type, comment, created_at')
+      .eq('purchase_order_id', poId)
+      .in('action_type', ['rejected', 'returned_for_rework'])
+      .not('comment', 'is', null)
+      .order('created_at', { ascending: true });
+
+    if (error) throw new BadRequestException(error.message);
+
+    const comments = (actions ?? [])
+      .map((a) => a.comment?.trim())
+      .filter((c): c is string => !!c);
+
+    if (comments.length < 2) {
+      throw new BadRequestException(
+        'Not enough feedback to summarize yet. This feature requires at least two rejection or rework comments.',
+      );
+    }
+
+    // Limit to last 5 comments to keep payload reasonable
+    const lastComments = comments.slice(-5);
+
+    return this.gemini.summarizeRejections(lastComments);
   }
 
   // ── Internal helper ─────────────────────────────────────

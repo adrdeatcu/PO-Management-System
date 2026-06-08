@@ -43,4 +43,13 @@ export class PurchaseOrdersController {
   ) {
     return this.poService.update(id, dto, user);
   }
+
+  // ── AI summary endpoint ──────────────────────────────────
+  @Post(':id/summarize-feedback')
+  summarizeFeedback(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.poService.summarizeFeedback(id, user);
+  }
 }
