@@ -12,12 +12,32 @@ export class GeminiService {
       throw new InternalServerErrorException('GEMINI_API_KEY is not configured');
     }
 
-    const prompt = [
+    // Clean and keep only non-empty comments
+    const allComments = comments
+      .map((c) => c?.trim())
+      .filter((c) => !!c && c.length > 0);
+
+    if (allComments.length === 0) {
+      return {
+        summary: 'No reviewer comments were provided.',
+        tips: '',
+      };
+    }
+
+    // Take the last 2 as "most recent"
+    const recentCount = 2;
+    const recentComments = allComments.slice(-recentCount);
+    const olderComments = allComments.slice(0, -recentCount);
+
+    const promptParts: string[] = [
       'You are helping a user understand why their purchase order was rejected multiple times.',
       'You will be given reviewer comments (from managers, IT, and finance).',
       '',
+      'The comments are listed in two groups: "Most recent" and "Earlier context".',
+      'If any comments conflict, ALWAYS treat the MOST RECENT comments as the final rule and base your advice on them.',
+      '',
       'Your task:',
-      '1) Write a concise, plain-language summary of the main reasons for rejection.',
+      '1) Write a concise, plain-language summary of the main reasons for rejection, focusing mainly on the most recent comments.',
       '2) Write 3–5 concrete, actionable tips to improve the purchase order so it can be approved next time.',
       '',
       'IMPORTANT OUTPUT FORMAT:',
@@ -31,9 +51,19 @@ export class GeminiService {
       '',
       'Do not add any other headings.',
       '',
-      'Reviewer comments:',
-      ...comments.map((c, i) => `${i + 1}. ${c}`),
-    ].join('\n');
+      'Most recent reviewer comments (highest priority):',
+      ...recentComments.map((c, i) => `R${i + 1}. ${c}`),
+    ];
+
+    if (olderComments.length > 0) {
+      promptParts.push(
+        '',
+        'Earlier reviewer comments (lower priority, for context only):',
+        ...olderComments.map((c, i) => `C${i + 1}. ${c}`),
+      );
+    }
+
+    const prompt = promptParts.join('\n');
 
     try {
       const res = await fetch(`${this.endpoint}?key=${this.apiKey}`, {
