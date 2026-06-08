@@ -14,7 +14,7 @@ import { useCurrentUser } from '../../../../hooks/useCurrentUser';
 import { canEditPO } from '../../../../lib/utils/permissions';
 import { formatCurrency, formatDate } from '../../../../lib/utils/format';
 import type { POWithActions } from '../../../../types/purchase-order';
-import { ArrowLeft, Pencil } from 'lucide-react';
+import { ArrowLeft, Pencil, Copy } from 'lucide-react';
 
 export default function PODetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -28,6 +28,7 @@ export default function PODetailPage() {
   const [summaryTips, setSummaryTips] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const fetchPO = useCallback(async () => {
     try {
@@ -40,7 +41,9 @@ export default function PODetailPage() {
     }
   }, [id]);
 
-  useEffect(() => { fetchPO(); }, [fetchPO]);
+  useEffect(() => {
+    fetchPO();
+  }, [fetchPO]);
 
   if (loading) return <LoadingSpinner />;
 
@@ -65,13 +68,16 @@ export default function PODetailPage() {
         a.comment.trim().length > 0,
     ).length;
 
-  const canSummarize = rejectionCommentsCount >= 2;
+  // Only allow AI summary when PO needs rework AND has at least 2 rejection comments
+  const canSummarize =
+    po.status === 'needs_rework' && rejectionCommentsCount >= 2;
 
   const handleSummarize = async () => {
     setSummaryError(null);
     setSummary(null);
     setSummaryTips(null);
     setSummaryLoading(true);
+    setCopied(false);
 
     try {
       const result = await purchaseOrdersApi.summarizeFeedback(po.id);
@@ -84,6 +90,20 @@ export default function PODetailPage() {
       setSummaryError(msg);
     } finally {
       setSummaryLoading(false);
+    }
+  };
+
+  const handleCopySummary = async () => {
+    if (!summary && !summaryTips) return;
+
+    const textToCopy = [summary, summaryTips].filter(Boolean).join('\n\n');
+
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // optionally handle copy error
     }
   };
 
@@ -101,11 +121,7 @@ export default function PODetailPage() {
                 </Button>
               </Link>
             )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => router.back()}
-            >
+            <Button variant="ghost" size="sm" onClick={() => router.back()}>
               <ArrowLeft size={14} />
               Back
             </Button>
@@ -162,15 +178,27 @@ export default function PODetailPage() {
                 )}
               </div>
 
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={handleSummarize}
-                loading={summaryLoading}
-                className="shrink-0"
-              >
-                Summarize
-              </Button>
+              <div className="flex flex-col items-end gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={handleSummarize}
+                  loading={summaryLoading}
+                >
+                  Summarize
+                </Button>
+
+                {summary && (
+                  <button
+                    type="button"
+                    onClick={handleCopySummary}
+                    className="inline-flex items-center gap-1 text-[11px] text-teal-900/80 hover:text-teal-900"
+                  >
+                    <Copy size={12} />
+                    {copied ? 'Copied' : 'Copy summary'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -192,7 +220,9 @@ export default function PODetailPage() {
             )}
             {canEdit && (
               <Link href={`/purchase-orders/${po.id}/edit`} className="mt-3 inline-block">
-                <Button size="sm" variant="danger">Edit and Resubmit</Button>
+                <Button size="sm" variant="danger">
+                  Edit and Resubmit
+                </Button>
               </Link>
             )}
           </div>
@@ -251,10 +281,22 @@ export default function PODetailPage() {
             <div className="bg-white rounded-lg border border-gray-200 p-5">
               <h3 className="text-sm font-semibold text-gray-900 mb-3">Approval Path</h3>
               <div className="flex flex-wrap gap-2">
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${po.is_manager_approval_required ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-400 line-through'}`}>
+                <span
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${
+                    po.is_manager_approval_required
+                      ? 'bg-blue-50 text-blue-700'
+                      : 'bg-gray-100 text-gray-400 line-through'
+                  }`}
+                >
                   {po.is_manager_approval_required ? '✓' : '–'} Manager Approval
                 </span>
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${po.is_it_validation_required ? 'bg-orange-50 text-orange-700' : 'bg-gray-100 text-gray-400 line-through'}`}>
+                <span
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${
+                    po.is_it_validation_required
+                      ? 'bg-orange-50 text-orange-700'
+                      : 'bg-gray-100 text-gray-400 line-through'
+                  }`}
+                >
                   {po.is_it_validation_required ? '✓' : '–'} IT Validation
                 </span>
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700">
