@@ -11,14 +11,22 @@ import { formatDateShort } from '../../../../lib/utils/format';
 import { Plus, Search } from 'lucide-react';
 
 interface UserRole { id: string; code: string; name: string; }
+
 interface User {
   id: string;
   full_name: string;
   email: string;
   department_id: string | null;
   created_at: string;
-  departments: { name: string; code: string } | null;
+  departments: { id: string; name: string; code: string } | null;
   roles: UserRole[];
+}
+
+interface Department {
+  id: string;
+  name: string;
+  code: string;
+  manager_user_id: string | null;
 }
 
 const roleColors: Record<string, string> = {
@@ -31,19 +39,51 @@ const roleColors: Record<string, string> = {
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
+    setError(null);
     const data = await adminApi.getUsers(search || undefined);
-    setUsers(data);
+    setUsers(data as User[]);
     setLoading(false);
   }, [search]);
 
-  useEffect(() => { fetchUsers(); }, [fetchUsers]);
+  const fetchDepartments = useCallback(async () => {
+    const depts = await adminApi.getDepartments();
+    setDepartments(depts as Department[]);
+  }, []);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  useEffect(() => {
+    fetchDepartments();
+  }, [fetchDepartments]);
+
+  const handleDepartmentChange = async (user: User, departmentId: string) => {
+    setError(null);
+    setUpdatingUserId(user.id);
+
+    try {
+      await adminApi.updateUserDepartment(user.id, departmentId || null);
+      await fetchUsers();
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        'Failed to update department.';
+      setError(msg);
+    } finally {
+      setUpdatingUserId(null);
+    }
+  };
 
   return (
     <>
@@ -59,7 +99,10 @@ export default function AdminUsersPage() {
       <div className="p-6">
         {/* Search */}
         <div className="mb-4 relative max-w-sm">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Search
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+          />
           <input
             type="text"
             value={search}
@@ -69,13 +112,26 @@ export default function AdminUsersPage() {
           />
         </div>
 
-        {loading ? <LoadingSpinner /> : (
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        {loading ? (
+          <LoadingSpinner />
+        ) : (
           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   {['Name', 'Email', 'Department', 'Roles', 'Joined', 'Actions'].map((h) => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>
+                    <th
+                      key={h}
+                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      {h}
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -87,33 +143,44 @@ export default function AdminUsersPage() {
                         <div className="w-7 h-7 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 text-xs font-semibold">
                           {user.full_name.charAt(0).toUpperCase()}
                         </div>
-                        <span className="text-sm font-medium text-gray-900">{user.full_name}</span>
+                        <span className="text-sm font-medium text-gray-900">
+                          {user.full_name}
+                        </span>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500">{user.email}</td>
                     <td className="px-4 py-3 text-sm text-gray-500">
-                      {user.departments ? (
-                        <span className="inline-flex items-center gap-1">
-                          <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">{user.departments.code}</span>
-                          {user.departments.name}
-                        </span>
-                      ) : (
-                        <span className="text-gray-300">—</span>
-                      )}
+                      <select
+                        value={user.department_id ?? ''}
+                        onChange={(e) => handleDepartmentChange(user, e.target.value)}
+                        disabled={updatingUserId === user.id}
+                        className="px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 bg-white min-w-40"
+                      >
+                        <option value="">No department</option>
+                        {departments.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.code} — {d.name}
+                          </option>
+                        ))}
+                      </select>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1">
                         {user.roles.map((role) => (
                           <span
                             key={role.id ?? role.code}
-                            className={`px-2 py-0.5 rounded-full text-xs font-medium ${roleColors[role.code] ?? 'bg-gray-100 text-gray-600'}`}
+                            className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                              roleColors[role.code] ?? 'bg-gray-100 text-gray-600'
+                            }`}
                           >
                             {role.code}
                           </span>
                         ))}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-400">{formatDateShort(user.created_at)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-400">
+                      {formatDateShort(user.created_at)}
+                    </td>
                     <td className="px-4 py-3">
                       <button
                         onClick={() => setSelectedUser(user)}
@@ -139,7 +206,10 @@ export default function AdminUsersPage() {
       {showCreateModal && (
         <CreateUserModal
           onClose={() => setShowCreateModal(false)}
-          onCreated={() => { setShowCreateModal(false); fetchUsers(); }}
+          onCreated={() => {
+            setShowCreateModal(false);
+            fetchUsers();
+          }}
         />
       )}
 
@@ -149,7 +219,10 @@ export default function AdminUsersPage() {
           userName={selectedUser.full_name}
           currentRoles={selectedUser.roles}
           onClose={() => setSelectedUser(null)}
-          onUpdated={() => { setSelectedUser(null); fetchUsers(); }}
+          onUpdated={() => {
+            setSelectedUser(null);
+            fetchUsers();
+          }}
         />
       )}
     </>

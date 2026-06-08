@@ -44,7 +44,9 @@ export const adminApi = {
   },
 
   updateUserDepartment: async (userId: string, department_id: string | null) => {
-    const { data } = await apiClient.patch(`/admin/users/${userId}/department`, { department_id });
+    const { data } = await apiClient.patch(`/admin/users/${userId}/department`, {
+      department_id,
+    });
     return data as { message: string };
   },
 
@@ -70,6 +72,11 @@ export const adminApi = {
   getDepartments: async () => {
     const { data } = await apiClient.get('/admin/departments');
     return data as AdminDepartment[];
+  },
+
+  createDepartment: async (payload: { name: string; code: string }) => {
+    const { data } = await apiClient.post('/admin/departments', payload);
+    return data as AdminDepartment;
   },
 
   setDepartmentManager: async (userId: string, departmentId: string) => {
