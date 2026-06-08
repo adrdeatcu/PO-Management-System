@@ -92,14 +92,60 @@ export class AdminUsersService {
     return { id: newUserId, message: 'User created successfully.' };
   }
 
-  // ── Update user's department ──────────────────────────────
+  // ── Update user's department (and revoke manager if needed) ─
   async updateDepartment(userId: string, departmentId: string | null) {
+    // 1) Update profile.department_id
     const { error } = await this.db.client
       .from('profiles')
       .update({ department_id: departmentId })
       .eq('id', userId);
 
     if (error) throw new BadRequestException(error.message);
+
+    // 2) If department is cleared, revoke manager assignments + manager role
+    if (departmentId === null) {
+      // Find all departments where this user is manager
+      const { data: managedDepts, error: managedError } = await this.db.client
+        .from('departments')
+        .select('id')
+        .eq('manager_user_id', userId);
+
+      if (managedError) throw new BadRequestException(managedError.message);
+
+      if (managedDepts && managedDepts.length > 0) {
+        // Clear manager_user_id for those departments
+        const { error: clearError } = await this.db.client
+          .from('departments')
+          .update({ manager_user_id: null })
+          .eq('manager_user_id', userId);
+
+        if (clearError) throw new BadRequestException(clearError.message);
+      }
+
+      // Remove manager role if user has it
+      const { data: managerRole, error: roleError } = await this.db.client
+        .from('roles')
+        .select('id')
+        .eq('code', 'manager')
+        .single();
+
+      if (roleError) {
+        throw new BadRequestException(roleError.message);
+      }
+
+      if (managerRole) {
+        const { error: removeRoleError } = await this.db.client
+          .from('user_roles')
+          .delete()
+          .eq('user_id', userId)
+          .eq('role_id', managerRole.id);
+
+        if (removeRoleError) {
+          throw new BadRequestException(removeRoleError.message);
+        }
+      }
+    }
+
     return { message: 'Department updated.' };
   }
 
@@ -222,7 +268,7 @@ export class AdminUsersService {
 
     if (updateError) throw new BadRequestException(updateError.message);
 
-    // 5) Ensure user has manager role
+    // 5) Ensure new manager has manager role
     const { error: roleAssignError } = await this.db.client
       .from('user_roles')
       .upsert(
@@ -231,6 +277,34 @@ export class AdminUsersService {
       );
 
     if (roleAssignError) throw new BadRequestException(roleAssignError.message);
+
+    // 6) If there was a previous manager, and they no longer manage any department,
+    //    revoke their manager role
+    if (previousManagerId && previousManagerId !== userId) {
+      // Check if previous manager still manages any department
+      const { data: stillManaging, error: stillManagingError } = await this.db.client
+        .from('departments')
+        .select('id')
+        .eq('manager_user_id', previousManagerId);
+
+      if (stillManagingError) {
+        throw new BadRequestException(stillManagingError.message);
+      }
+
+      const stillHasDepartments = (stillManaging ?? []).length > 0;
+
+      if (!stillHasDepartments) {
+        const { error: removeOldManagerRoleError } = await this.db.client
+          .from('user_roles')
+          .delete()
+          .eq('user_id', previousManagerId)
+          .eq('role_id', managerRole.id);
+
+        if (removeOldManagerRoleError) {
+          throw new BadRequestException(removeOldManagerRoleError.message);
+        }
+      }
+    }
 
     return {
       message: 'Department manager updated.',

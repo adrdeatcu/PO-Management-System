@@ -68,12 +68,37 @@ export default function AdminUsersPage() {
     fetchDepartments();
   }, [fetchDepartments]);
 
-  const handleDepartmentChange = async (user: User, departmentId: string) => {
+  const handleDepartmentChange = async (user: User, newDepartmentId: string) => {
     setError(null);
+
+    const oldDept = user.department_id
+      ? departments.find((d) => d.id === user.department_id) ?? null
+      : null;
+    const newDept = newDepartmentId
+      ? departments.find((d) => d.id === newDepartmentId) ?? null
+      : null;
+
+    const oldLabel = oldDept ? `${oldDept.code} — ${oldDept.name}` : 'No department';
+    const newLabel = newDept ? `${newDept.code} — ${newDept.name}` : 'No department';
+
+    const confirmed = window.confirm(
+      `Are you sure you want to move "${user.full_name}"\n` +
+      `from: ${oldLabel}\n` +
+      `to:   ${newLabel}?\n\n` +
+      (newDept
+        ? 'If this user is a manager in another department, that relationship may no longer be valid.'
+        : 'If this user is currently a manager, their manager assignments and manager role will be revoked.'),
+    );
+
+    if (!confirmed) {
+      // Let React re-render with previous value on next fetch; no optimistic update here.
+      return;
+    }
+
     setUpdatingUserId(user.id);
 
     try {
-      await adminApi.updateUserDepartment(user.id, departmentId || null);
+      await adminApi.updateUserDepartment(user.id, newDepartmentId || null);
       await fetchUsers();
     } catch (err: unknown) {
       const msg =
