@@ -66,7 +66,11 @@ export default function PODetailPage() {
                 </Button>
               </Link>
             )}
-            <Button variant="ghost" size="sm" onClick={() => router.push('/purchase-orders')}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.back()}
+            >
               <ArrowLeft size={14} />
               Back
             </Button>
@@ -75,7 +79,6 @@ export default function PODetailPage() {
       />
 
       <div className="p-6 space-y-6 max-w-5xl">
-
         {/* Rework banner */}
         {po.status === 'needs_rework' && (
           <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -94,10 +97,8 @@ export default function PODetailPage() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
           {/* Left: PO Details */}
           <div className="lg:col-span-2 space-y-5">
-
             {/* Header card */}
             <div className="bg-white rounded-lg border border-gray-200 p-5">
               <div className="flex items-start justify-between gap-4 mb-4">
@@ -161,11 +162,36 @@ export default function PODetailPage() {
 
               {/* Milestone timestamps */}
               <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 text-xs text-gray-500">
-                {po.submitted_at && <div>Submitted: <span className="text-gray-700">{formatDate(po.submitted_at)}</span></div>}
-                {po.manager_approved_at && <div>Manager approved: <span className="text-gray-700">{formatDate(po.manager_approved_at)}</span></div>}
-                {po.it_validated_at && <div>IT validated: <span className="text-gray-700">{formatDate(po.it_validated_at)}</span></div>}
-                {po.finance_approved_at && <div>Finance approved: <span className="text-gray-700">{formatDate(po.finance_approved_at)}</span></div>}
-                {po.completed_at && <div>Completed: <span className="text-gray-700">{formatDate(po.completed_at)}</span></div>}
+                {po.submitted_at && (
+                  <div>
+                    Submitted:{' '}
+                    <span className="text-gray-700">{formatDate(po.submitted_at)}</span>
+                  </div>
+                )}
+                {po.manager_approved_at && (
+                  <div>
+                    Manager approved:{' '}
+                    <span className="text-gray-700">{formatDate(po.manager_approved_at)}</span>
+                  </div>
+                )}
+                {po.it_validated_at && (
+                  <div>
+                    IT validated:{' '}
+                    <span className="text-gray-700">{formatDate(po.it_validated_at)}</span>
+                  </div>
+                )}
+                {po.finance_approved_at && (
+                  <div>
+                    Finance approved:{' '}
+                    <span className="text-gray-700">{formatDate(po.finance_approved_at)}</span>
+                  </div>
+                )}
+                {po.completed_at && (
+                  <div>
+                    Completed:{' '}
+                    <span className="text-gray-700">{formatDate(po.completed_at)}</span>
+                  </div>
+                )}
               </div>
             </div>
 
